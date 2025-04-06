@@ -1,0 +1,5 @@
+result
+result-*
+*.qcow2
+*-swtpm
+*-efi-vars.fd
