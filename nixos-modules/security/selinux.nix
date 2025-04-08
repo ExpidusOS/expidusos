@@ -1,17 +1,26 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   cfg = config.security.selinux;
 in
 {
   options.security.selinux = {
-    enable = lib.mkEnableOption "SELinux" // { default = true; };
+    enable = lib.mkEnableOption "SELinux" // {
+      default = true;
+    };
     policy = lib.mkOption {
       type = lib.types.path;
       description = "The path to the SELinux policy";
       defaultText = lib.literalExpression ''"''${pkgs.selinux-refpolicy.override { inherit (config.security.selinux) policyVersion; }}/share/selinux/refpolicy"'';
-      default = "${pkgs.selinux-refpolicy.override {
-        inherit (config.security.selinux) policyVersion;
-      }}/share/selinux/refpolicy";
+      default = "${
+        pkgs.selinux-refpolicy.override {
+          inherit (config.security.selinux) policyVersion;
+        }
+      }/share/selinux/refpolicy";
     };
     policyVersion = lib.mkOption {
       type = lib.types.nullOr lib.types.int;
@@ -24,7 +33,11 @@ in
       default = "refpolicy";
     };
     mode = lib.mkOption {
-      type = lib.types.enum [ "enforcing" "permissive" "disabled" ];
+      type = lib.types.enum [
+        "enforcing"
+        "permissive"
+        "disabled"
+      ];
       description = "The enforcement mode";
       default = "permissive";
     };
@@ -51,7 +64,19 @@ in
       deps = [ "etc" ];
       text = ''
         install -d -m0755 /var/lib/selinux
-        ${lib.getExe' pkgs.policycoreutils "semodule"} -s ${cfg.type} -i ${cfg.policy}/*.pp
+        cmd="${lib.getExe' pkgs.policycoreutils "semodule"} -s ${cfg.type} -i ${cfg.policy}/*.pp"
+        skipSELinuxActivation=0
+
+        if [ -e /var/lib/selinux/activate-check ]; then
+          if [ "$(cat /var/lib/selinux/activate-check)" == "$cmd" ]; then
+            skipSELinuxActivation=1
+          fi
+        fi
+
+        if [ -z $skipSELinuxActivation ]; then
+          eval "$cmd"
+          echo "$cmd" >/var/lib/selinux/activate-check
+        fi
       '';
     };
 
@@ -64,26 +89,31 @@ in
         SELINUX=${cfg.mode}
         SELINUXTYPE=${cfg.type}
       '';
-      etc."selinux/semanage.conf".text = lib.optionalString (cfg.policyVersion != null) ''
-        policy-version = ${toString cfg.policyVersion}
-      '' + ''
-        compiler-directory = ${pkgs.policycoreutils}/libexec/selinux/hll
+      etc."selinux/semanage.conf".text =
+        lib.optionalString (cfg.policyVersion != null) ''
+          policy-version = ${toString cfg.policyVersion}
+        ''
+        + ''
+          compiler-directory = ${pkgs.policycoreutils}/libexec/selinux/hll
 
-        [load_policy]
-        path = ${lib.getExe' pkgs.policycoreutils "load_policy"}
-        [end]
+          [load_policy]
+          path = ${lib.getExe' pkgs.policycoreutils "load_policy"}
+          [end]
 
-        [setfiles]
-        path = ${lib.getExe' pkgs.policycoreutils "setfiles"}
-        args = -q -c $@ $<
-        [end]
+          [setfiles]
+          path = ${lib.getExe' pkgs.policycoreutils "setfiles"}
+          args = -q -c $@ $<
+          [end]
 
-        [sefcontext_compile]
-        path = ${lib.getExe' pkgs.libselinux "sefcontext_compile"}
-        args = -r $@
-        [end]
-      '';
-      systemPackages = with pkgs; [ libselinux policycoreutils ];
+          [sefcontext_compile]
+          path = ${lib.getExe' pkgs.libselinux "sefcontext_compile"}
+          args = -r $@
+          [end]
+        '';
+      systemPackages = with pkgs; [
+        libselinux
+        policycoreutils
+      ];
     };
   };
 }
