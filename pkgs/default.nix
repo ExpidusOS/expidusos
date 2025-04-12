@@ -1,7 +1,6 @@
 pkgs: prev: with pkgs;
 {
   expidus-wallpapers = callPackage ./expidus-wallpapers {};
-  selinux-refpolicy = callPackage ./selinux-refpolicy {};
 
   cosmic-comp = prev.cosmic-comp.overrideAttrs {
     separateDebugInfo = true;
@@ -21,5 +20,18 @@ pkgs: prev: with pkgs;
       url = "${f.se_url}/${f.version}/libselinux-${f.version}.tar.gz";
       hash = "sha256-7C0nifkxFS0hwdsetLwgLOTszt402b6eNg47RSQ87iw=";
     };
+  });
+
+  libsemanage = prev.libsemanage.overrideAttrs (f: p: {
+    patches = p.patches or [] ++ [
+      ./libsemanage-restorecon.patch
+      ./libsemanage-config-func.patch
+    ];
+  });
+
+  policycoreutils = prev.policycoreutils.overrideAttrs (f: p: {
+    patches = p.patches or [] ++ [
+      ./policycoreutils-semanage-config.patch
+    ];
   });
 }

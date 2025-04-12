@@ -1,0 +1,86 @@
+diff --git a/include/semanage/handle.h b/include/semanage/handle.h
+index a5ea31de..601cd9ee 100644
+--- a/include/semanage/handle.h
++++ b/include/semanage/handle.h
+@@ -30,7 +30,11 @@
+ struct semanage_handle;
+ typedef struct semanage_handle semanage_handle_t;
+ 
+-/* Create and return a semanage handle.
++/* Create and return a semanage handle with a specific config path.
++   The handle is initially in the disconnected state. */
++semanage_handle_t *semanage_handle_create_with_path(const char *conf_name);
++
++/* Create and return a semanage handle with the default config path.
+    The handle is initially in the disconnected state. */
+ extern semanage_handle_t *semanage_handle_create(void);
+ 
+diff --git a/src/handle.c b/src/handle.c
+index faea0606..ca57702a 100644
+--- a/src/handle.c
++++ b/src/handle.c
+@@ -59,19 +59,14 @@ const char * semanage_root(void)
+ 	return private_semanage_root;
+ }
+ 
+-
+-semanage_handle_t *semanage_handle_create(void)
++semanage_handle_t *semanage_handle_create_with_path(const char *conf_name)
+ {
+ 	semanage_handle_t *sh = NULL;
+-	char *conf_name = NULL;
+ 
+ 	/* Allocate handle */
+ 	if ((sh = calloc(1, sizeof(semanage_handle_t))) == NULL)
+ 		goto err;
+ 
+-	if ((conf_name = semanage_conf_path()) == NULL)
+-		goto err;
+-
+ 	if ((sh->conf = semanage_conf_parse(conf_name)) == NULL)
+ 		goto err;
+ 
+@@ -106,13 +101,30 @@ semanage_handle_t *semanage_handle_create(void)
+ 	sh->msg_callback = semanage_msg_default_handler;
+ 	sh->msg_callback_arg = NULL;
+ 
++	return sh;
++
++      err:
++	semanage_handle_destroy(sh);
++	return NULL;
++}
++
++semanage_handle_t *semanage_handle_create(void)
++{
++	semanage_handle_t *sh = NULL;
++	char *conf_name = NULL;
++
++	if ((conf_name = semanage_conf_path()) == NULL)
++		goto err;
++
++	if ((sh = semanage_handle_create_with_path(conf_name)) == NULL)
++		goto err;
++
+ 	free(conf_name);
+ 
+ 	return sh;
+ 
+       err:
+ 	free(conf_name);
+-	semanage_handle_destroy(sh);
+ 	return NULL;
+ }
+ 
+diff --git a/src/libsemanage.map b/src/libsemanage.map
+index c8214b26..02c615ac 100644
+--- a/src/libsemanage.map
++++ b/src/libsemanage.map
+@@ -347,6 +347,7 @@ LIBSEMANAGE_1.1 {
+ } LIBSEMANAGE_1.0;
+ 
+ LIBSEMANAGE_3.4 {
++    semanage_handle_create_with_path;
+     semanage_module_compute_checksum;
+     semanage_set_check_ext_changes;
+ } LIBSEMANAGE_1.1;

@@ -1,0 +1,88 @@
+diff --git a/src/conf-parse.y b/src/conf-parse.y
+index e1fc9f4f..a44e4593 100644
+--- a/src/conf-parse.y
++++ b/src/conf-parse.y
+@@ -63,7 +63,7 @@ static int parse_errors;
+ 
+ %token MODULE_STORE VERSION EXPAND_CHECK FILE_MODE SAVE_PREVIOUS SAVE_LINKED TARGET_PLATFORM COMPILER_DIR IGNORE_MODULE_CACHE STORE_ROOT OPTIMIZE_POLICY MULTIPLE_DECLS
+ %token LOAD_POLICY_START SETFILES_START SEFCONTEXT_COMPILE_START DISABLE_GENHOMEDIRCON HANDLE_UNKNOWN USEPASSWD IGNOREDIRS
+-%token BZIP_BLOCKSIZE BZIP_SMALL REMOVE_HLL
++%token BZIP_BLOCKSIZE BZIP_SMALL RESTORECON REMOVE_HLL
+ %token VERIFY_MOD_START VERIFY_LINKED_START VERIFY_KERNEL_START BLOCK_END
+ %token PROG_PATH PROG_ARGS
+ %token <s> ARG
+@@ -97,6 +97,7 @@ single_opt:     module_store
+ 	|	bzip_blocksize
+ 	|	bzip_small
+ 	|	remove_hll
++	|	restorecon
+ 	|	optimize_policy
+ 	|	multiple_decls
+         ;
+@@ -291,6 +292,17 @@ remove_hll:  REMOVE_HLL'=' ARG {
+ 	free($3);
+ }
+ 
++restorecon:  RESTORECON'=' ARG {
++	if (strcasecmp($3, "false") == 0) {
++		current_conf->restorecon = 0;
++	} else if (strcasecmp($3, "true") == 0) {
++		current_conf->restorecon = 1;
++	} else {
++		yyerror("restorecon can only be 'true' or 'false'");
++	}
++	free($3);
++}
++
+ optimize_policy:  OPTIMIZE_POLICY '=' ARG {
+ 	if (strcasecmp($3, "false") == 0) {
+ 		current_conf->optimize_policy = 0;
+@@ -400,6 +412,7 @@ static int semanage_conf_init(semanage_conf_t * conf)
+ 	conf->bzip_small = 0;
+ 	conf->ignore_module_cache = 0;
+ 	conf->remove_hll = 0;
++	conf->restorecon = 1;
+ 	conf->optimize_policy = 1;
+ 	conf->multiple_decls = 1;
+ 
+diff --git a/src/conf-scan.l b/src/conf-scan.l
+index 64433f7b..a180f01f 100644
+--- a/src/conf-scan.l
++++ b/src/conf-scan.l
+@@ -54,6 +54,7 @@ handle-unknown    return HANDLE_UNKNOWN;
+ bzip-blocksize	return BZIP_BLOCKSIZE;
+ bzip-small	return BZIP_SMALL;
+ remove-hll	return REMOVE_HLL;
++restorecon	return RESTORECON;
+ optimize-policy return OPTIMIZE_POLICY;
+ multiple-decls return MULTIPLE_DECLS;
+ "[load_policy]"   return LOAD_POLICY_START;
+diff --git a/src/semanage_conf.h b/src/semanage_conf.h
+index 5db08f0c..ef4534f8 100644
+--- a/src/semanage_conf.h
++++ b/src/semanage_conf.h
+@@ -49,6 +49,7 @@ typedef struct semanage_conf {
+ 	int ignore_module_cache;
+ 	int optimize_policy;
+ 	int multiple_decls;
++	int restorecon;
+ 	char *ignoredirs;	/* ";" separated of list for genhomedircon to ignore */
+ 	struct external_prog *load_policy;
+ 	struct external_prog *setfiles;
+diff --git a/src/semanage_store.c b/src/semanage_store.c
+index 307f27f9..dee8b5e7 100644
+--- a/src/semanage_store.c
++++ b/src/semanage_store.c
+@@ -1823,8 +1823,11 @@ static int semanage_commit_sandbox(semanage_handle_t * sh)
+ 
+       cleanup:
+ 	semanage_release_active_lock(sh);
+-	sehandle = selinux_restorecon_default_handle();
+-	selinux_restorecon_set_sehandle(sehandle);
++
++	if (sh->conf->restorecon) {
++		sehandle = selinux_restorecon_default_handle();
++		selinux_restorecon_set_sehandle(sehandle);
++	}
+ 	return retval;
+ }

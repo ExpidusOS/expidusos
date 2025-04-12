@@ -15,12 +15,12 @@ in
     policy = lib.mkOption {
       type = lib.types.path;
       description = "The path to the SELinux policy";
-      defaultText = lib.literalExpression ''"''${pkgs.selinux-refpolicy.override { inherit (config.security.selinux) policyVersion; }}/share/selinux/refpolicy"'';
+      defaultText = lib.literalExpression ''''${pkgs.selinux-refpolicy.override { inherit (config.security.selinux) policyVersion; }}'';
       default = "${
         pkgs.selinux-refpolicy.override {
           inherit (config.security.selinux) policyVersion;
         }
-      }/share/selinux/refpolicy";
+      }";
     };
     policyVersion = lib.mkOption {
       type = lib.types.nullOr lib.types.int;
@@ -64,7 +64,7 @@ in
       deps = [ "etc" ];
       text = ''
         install -d -m0755 /var/lib/selinux
-        cmd="${lib.getExe' pkgs.policycoreutils "semodule"} -s ${cfg.type} -i ${cfg.policy}/*.pp"
+        cmd="${lib.getExe' pkgs.policycoreutils "semodule"} -s ${cfg.type} -i ${cfg.policy}/share/selinux/${cfg.type}/*.pp"
         skipSELinuxActivation=0
 
         if [ -e /var/lib/selinux/activate-check ]; then
@@ -77,6 +77,22 @@ in
           eval "$cmd"
           echo "$cmd" >/var/lib/selinux/activate-check
         fi
+      '';
+    };
+
+    system.build.selinux-policy = pkgs.stdenv.mkDerivation {
+      name = "selinux-${cfg.type}-modules.img";
+
+      nativeBuildInputs = with pkgs; [
+        policycoreutils
+        squashfsTools
+      ];
+
+      buildCommand = ''
+        mkdir -p files/etc/selinux files/var/lib/selinux/final
+        printf "${config.environment.etc."selinux/semanage.conf".text}" > config
+        semodule --config config -p files -s ${cfg.type} -i ${cfg.policy}/share/selinux/${cfg.type}/*.pp || true
+        mksquashfs files $out -b 1048576 -processors $NIX_BUILD_CORES
       '';
     };
 
@@ -102,12 +118,12 @@ in
 
           [setfiles]
           path = ${lib.getExe' pkgs.policycoreutils "setfiles"}
-          args = -q -c $@ $<
+          args = -q -v -c $@ $<
           [end]
 
           [sefcontext_compile]
           path = ${lib.getExe' pkgs.libselinux "sefcontext_compile"}
-          args = -r $@
+          args = -v -r $@
           [end]
         '';
       systemPackages = with pkgs; [
